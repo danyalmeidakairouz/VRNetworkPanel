@@ -385,8 +385,7 @@ namespace VRNetworkPanel
         public void Draw()
         {
             if (!Visible || !EnsureStyles()) return;
-            Event ev = Event.current;
-            if (ev != null && ev.type != EventType.Repaint) return;
+            // Repaint pass only - filtered by the caller (PanelDriver.OnGUI).
 
             // 1080p is the reference; larger screens scale up so the panel stays legible.
             float s = Mathf.Clamp(Screen.height / 1080f, 1f, 2.5f);

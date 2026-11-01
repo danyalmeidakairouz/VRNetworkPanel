@@ -26,7 +26,9 @@ namespace VRNetworkPanel
                 // Belt and braces: a disposed world is removed from the static registry.
                 // Il2CppInterop hands back a NEW wrapper per element, so compare pointers.
                 var all = World.s_AllWorlds;
-                if (all == null) return true; // cannot tell; IsCreated already said yes
+                // Cannot prove membership, so "no": fail closed. A cached world reaches this line
+                // without a fresh list walk, and IsCreated alone is not proof enough to call in.
+                if (all == null) return false;
                 for (int i = 0; i < all.Count; i++)
                 {
                     var o = all[i];

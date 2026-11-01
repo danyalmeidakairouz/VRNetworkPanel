@@ -15,7 +15,7 @@ namespace VRNetworkPanel
         // The GUID determines the config filename. Changing it orphans the existing config.
         public const string GUID = "vrnetworkpanel";
         public const string NAME = "VRNetworkPanel";
-        public const string VERSION = "1.1.0";
+        public const string VERSION = "1.1.1";
 
         internal static ManualLogSource Logger;
         internal static Settings Cfg;
@@ -63,7 +63,13 @@ namespace VRNetworkPanel
                 if (!injected)
                 {
                     ClassInjector.RegisterTypeInIl2Cpp<PanelHost>();
-                    AddComponent<PanelHost>();
+                    var host = AddComponent<PanelHost>();
+                    // Nothing here uses GUILayout, so Unity's Layout pass - a whole extra OnGUI
+                    // call every frame - is pure overhead. Unproven in this game, hence the try:
+                    // failing costs only the saving. Takes effect for the host's lifetime, i.e.
+                    // from a fresh game launch; a hot reload reuses the host already running.
+                    try { host.useGUILayout = false; }
+                    catch (Exception e) { Log.LogWarning($"Could not skip the IMGUI layout pass: {e.Message}"); }
                 }
                 // Last, so a throw above leaves the slots empty for the next load.
                 _driver.Install(slots);
@@ -101,6 +107,10 @@ namespace VRNetworkPanel
     /// flag in AppDomain data - typed with BCL types only, because a type from this assembly is a
     /// different type in every copy. Changing keys, indices or meaning breaks hot reload from
     /// every earlier version; if it must change, bump the keys' version.
+    ///
+    /// Part of the same contract: since 1.1.0 the host runs with useGUILayout = false, so no
+    /// Layout event ever reaches OnGUI. A driver must never use GUILayout - a hot-reloaded copy
+    /// that did would get no layout pass from a host created by an earlier copy.
     /// </summary>
     public class PanelHost : MonoBehaviour
     {
@@ -253,6 +263,18 @@ namespace VRNetworkPanel
 
         void OnGUI()
         {
+            // Both panels draw in the Repaint pass only. Checked once here rather than in each
+            // Draw: every Event.current read hands back a fresh wrapper, and OnGUI runs at least
+            // twice a frame. A null event means IMGUI did not say which pass this is - draw.
+            // Inside a try: outside one, a throw here would escape into the host and be logged by
+            // Unity on every OnGUI call, several times a frame, with no throttle.
+            try
+            {
+                Event ev = Event.current;
+                if (ev != null && ev.type != EventType.Repaint) return;
+            }
+            catch { return; }
+
             try { _panel.Draw(); }
             catch (Exception e)
             {

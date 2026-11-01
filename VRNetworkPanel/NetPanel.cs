@@ -34,10 +34,11 @@ namespace VRNetworkPanel
     /// so on them loss reads as a dash and ping falls back to ClientBootstrapSystem.Latency,
     /// whose UNIT IS UNMEASURED. Do not promise loss on a non-Steam transport.
     ///
-    /// Nothing from the world is cached across samples. Leave Game destroys ClientBootstrapSystem
-    /// and the transport with it, and calling into a freed one is the silent native crash
-    /// WorldGuard exists for - so every sample walks the chain again from the world, behind
-    /// WorldGuard.Usable(). That is ten probes a second (ProbeSeconds), never per frame.
+    /// Nothing obtained FROM the world is cached across samples. Leave Game destroys
+    /// ClientBootstrapSystem and the transport with it, and calling into a freed one is the silent
+    /// native crash WorldGuard exists for - so every sample walks the chain again from the world,
+    /// behind WorldGuard.Usable(). The World object itself is kept (see Read), but re-validated by
+    /// WorldGuard on every probe. Ten probes a second (ProbeSeconds), never per frame.
     /// </summary>
     internal sealed class NetPanel
     {
@@ -108,7 +109,10 @@ namespace VRNetworkPanel
         // From then on the probe falls back to Latency only, said once in the log - not retried
         // every probe into an error throttle that would make it look like a crash.
         private bool _steamCallBroken;
-        private string _pendingDetail = "(none)"; // last IsValid / state seen, for that warning
+        // Last IsValid / state seen, for that warning. Raw values, not a string: formatting one
+        // on every probe was garbage ten times a second for a line that almost never prints.
+        private bool _haveLast, _lastValid;
+        private ESteamNetworkingConnectionState _lastState;
         private bool _bootLookupWarned;
 
         private void MarkSteamBroken(string what, string detail)
@@ -248,7 +252,9 @@ namespace VRNetworkPanel
                     ClearReading();
                     ClearJitter();
                     MarkSteamBroken($"the Steam connection status stayed unreadable for "
-                                  + $"{PendingStaleSeconds:0}s", "last read " + _pendingDetail);
+                                  + $"{PendingStaleSeconds:0}s",
+                                  _haveLast ? $"last read valid={_lastValid} state={_lastState}"
+                                            : "last read (none)");
                     _pendingSince = -1f;
                 }
             }
@@ -268,12 +274,21 @@ namespace VRNetworkPanel
             if (source != Source.SteamPending && source != _loggedSource) LogSource(source);
         }
 
-        /// <summary>Walk the chain from the world, fresh. Fills the fields it can reach and
+        /// <summary>Walk the chain from the (re-validated) world, fresh. Fills the fields it can reach and
         /// says how far it got.</summary>
         private Source Read()
         {
-            World client = FindClient();
-            if (!WorldGuard.Usable(client)) return Source.NoWorld;
+            // The World object is kept between probes, but never trusted: every probe asks
+            // WorldGuard first, which checks IsCreated and that it is still in s_AllWorlds - the
+            // same test a fresh lookup would face. Only on a miss is the list searched by name,
+            // which copies every world's name string; doing that ten times a second was most of
+            // this method's garbage. Nothing obtained FROM the world is kept (see the class note).
+            World client = _client;
+            if (!WorldGuard.Usable(client))
+            {
+                _client = client = FindClient();
+                if (!WorldGuard.Usable(client)) return Source.NoWorld;
+            }
 
             ClientBootstrapSystem boot;
             try { boot = client.GetExistingSystemManaged<ClientBootstrapSystem>(); }
@@ -289,7 +304,9 @@ namespace VRNetworkPanel
                 }
                 return Source.NoWorld;
             }
-            if (boot == null) return Source.NoWorld;
+            // Not the client world after all (or not set up yet): search again next probe
+            // rather than asking the same world forever.
+            if (boot == null) { _client = null; return Source.NoWorld; }
 
             IClientNetworkLayer layer = boot._NetClient;
             ClientNetworkLayer cnl = layer?.TryCast<ClientNetworkLayer>();
@@ -311,7 +328,10 @@ namespace VRNetworkPanel
                         QuickConnectionStatus q = net.GetQuickConnectionStatus();
                         bool valid = q.IsValid;
                         var state = q.ConnectionState;
-                        _pendingDetail = $"valid={valid} state={state}";
+                        // Kept raw; the text is built only if the stale-gap warning fires.
+                        _lastValid = valid;
+                        _lastState = state;
+                        _haveLast = true;
                         if (valid && state == ESteamNetworkingConnectionState
                                                   .k_ESteamNetworkingConnectionState_Connected)
                         {
@@ -369,6 +389,8 @@ namespace VRNetworkPanel
             return Mathf.RoundToInt(v < 3f ? v * 1000f : v);
         }
 
+        private World _client; // see Read(): re-validated by WorldGuard on every probe
+
         private static World FindClient()
         {
             var all = World.s_AllWorlds;
@@ -412,6 +434,9 @@ namespace VRNetworkPanel
             _pendingSince = -1f;
             _nextPublish = 0f;
             _steamCallBroken = false;
+            // While switched off nothing probes, so a cached world would be held alive - and its
+            // memory with it - for as long as the readout stays off. One name search on re-enable.
+            _client = null;
             _fpsWindowStart = -1f;
             _nextSample = 0f;
             _dirtyFps = _dirtyNet = true;
@@ -436,6 +461,11 @@ namespace VRNetworkPanel
 
         // Rebuilt only at publish (SampleMs) or when the FPS window closes, never per frame.
         private string _fpsPart = "", _netPart = "", _line1 = "", _line2 = "";
+        // What GUI.Label actually draws. Text is set only when a line is rebuilt: passing a
+        // string instead re-marshals it into an il2cpp string on every repaint. GUI.Label(Rect,
+        // GUIContent, GUIStyle) is proven here - 1.0.0 drew its whole readout with it.
+        private readonly GUIContent _c1 = new GUIContent(), _c2 = new GUIContent();
+        private string _c1Text, _c2Text;
 
         private static readonly Color LabelColor = new Color(0.62f, 0.64f, 0.68f);
         private static readonly Color GoodColor = new Color(0.88f, 0.92f, 0.88f);
@@ -554,9 +584,8 @@ namespace VRNetworkPanel
         public void Draw()
         {
             if (!_cfg.Enabled.Value) return;
-            var ev = Event.current;
-            if (ev != null && ev.type != EventType.Repaint) return;
-
+            // Repaint pass only - filtered by the caller (PanelDriver.OnGUI), which reads
+            // Event.current once for both panels; each read allocates a wrapper.
             bool traffic = _cfg.ShowTraffic.Value;
             float em = traffic ? Mathf.Max(Line1Em, Line2Em) : Line1Em;
 
@@ -582,8 +611,12 @@ namespace VRNetworkPanel
                 GUI.DrawTexture(new Rect(x, y, width, height), _bg);
 
             float cy = y + pad - 1f;
-            GUI.Label(new Rect(x + pad, cy, textW, lineH), _line1, _style);
-            if (traffic) GUI.Label(new Rect(x + pad, cy + lineH, textW, lineH), _line2, _style);
+            // Reference compare: a rebuild always makes a new string, so this is true only on
+            // the frames after one - not a per-frame marshal.
+            if (!ReferenceEquals(_c1Text, _line1)) { _c1.text = _line1; _c1Text = _line1; }
+            if (!ReferenceEquals(_c2Text, _line2)) { _c2.text = _line2; _c2Text = _line2; }
+            GUI.Label(new Rect(x + pad, cy, textW, lineH), _c1, _style);
+            if (traffic) GUI.Label(new Rect(x + pad, cy + lineH, textW, lineH), _c2, _style);
             GUI.color = prev;
         }
 
