@@ -4,8 +4,8 @@ A BepInEx 6 (IL2CPP) client mod for V Rising that draws a thin Dota 2 style read
 connection:
 
 ```
-FPS  144   PING  38 ms   JITTER  1 ms   LOSS IN  0.0%   OUT  0.0%
-IN 12.4 KB/s 60 pkt/s    OUT 3.1 KB/s 60 pkt/s          (optional second line)
+FPS: 144    PING: 38 ms    JITTER: 1 ms    LOSS IN: 0.0%    OUT: 0.0%
+IN: 12.4 KB/s 60 pkt/s    OUT: 3.1 KB/s 60 pkt/s          (optional second line)
 ```
 
 It is **read-only**: it reads the Steam connection's own real-time status and writes nothing to
