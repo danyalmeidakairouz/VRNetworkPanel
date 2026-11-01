@@ -16,7 +16,22 @@ the game.
 1. Install BepInEx 6 for V Rising (IL2CPP build).
 2. Drop `VRNetworkPanel.dll` into `BepInEx/plugins/` (or `BepInEx/BloodpebblePlugins/` if you use
    Bloodpebble - it supports hot reload; not both).
-3. Launch the game. The readout shows at the top centre as soon as the mod loads.
+3. Launch the game. The readout shows in the top-left corner as soon as the mod loads. Press
+   **F1** for the settings panel.
+
+## Settings panel (F1)
+
+Keyboard only - the game does not pass mouse input to mod UI.
+
+| Key | Does |
+|---|---|
+| Up / Down | Select a setting |
+| Left / Right | Switch OFF / ON, step a number, cycle the corner |
+| Enter | Flip a switch; on a key setting, wait for the key to bind (Backspace unbinds, except for `MenuKey`; Esc cancels) |
+| Delete | Restore the default |
+| Esc | Close |
+
+Every change is saved to the config file immediately and takes effect at once.
 
 ## What the numbers mean
 
@@ -40,16 +55,18 @@ the game.
 
 ## Settings
 
-`BepInEx/config/vrnetworkpanel.cfg`, created on first launch.
+Edited from the F1 panel, or by hand in `BepInEx/config/vrnetworkpanel.cfg` (created on first
+launch; hand edits apply on the next launch).
 
 | Setting | Default | |
 |---|---|---|
 | `Enabled` | `true` | Show the readout |
-| `ToggleKey` | *(empty)* | Key that shows / hides it and saves the choice. Unbound by default so it cannot clash with another mod |
+| `MenuKey` | `F1` | Opens / closes the settings panel. Empty disables it |
+| `ToggleKey` | *(empty)* | Key that shows / hides the readout and saves the choice. Unbound by default so it cannot clash with another mod |
 | `DumpKey` | *(empty)* | Key that writes a `-- netpanel` section to `BepInEx/LogOutput.log`: transport, connection state, raw Steam figures |
-| `Corner` | `TopCenter` | `TopLeft`, `TopCenter`, `TopRight`, `BottomLeft`, `BottomCenter` or `BottomRight` |
+| `Corner` | `TopLeft` | `TopLeft`, `TopCenter`, `TopRight`, `BottomLeft`, `BottomCenter` or `BottomRight` |
 | `FontSize` | `13` | 8-40, shrunk further if the strip would not fit the screen |
-| `SampleMs` | `500` | How often the shown numbers change (floor 100). The connection is read ~10x a second regardless |
+| `SampleMs` | `500` | How often the shown numbers change, 100-5000. The connection is read ~10x a second regardless |
 | `ShowTraffic` | `false` | Second line with KB/s and packets/s in and out (Steam only) |
 | `Background` | `true` | Translucent strip behind the text |
 

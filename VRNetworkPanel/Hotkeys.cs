@@ -53,6 +53,13 @@ namespace VRNetworkPanel
             return down && !was && _focused;
         }
 
+        /// <summary>True while the key is held (for auto-repeat). Reads as up while unfocused.</summary>
+        public bool IsDown(int vk)
+        {
+            if (vk <= 0 || vk > 0xFF || !_focused) return false;
+            return (GetAsyncKeyState(vk) & 0x8000) != 0;
+        }
+
         /// <summary>
         /// Virtual-key code for a key name, or 0 if unrecognised. Accepts "F6", "A", "5",
         /// "Space", "Insert", "Numpad0", ... Case-insensitive. Empty means "unbound".
@@ -104,6 +111,55 @@ namespace VRNetworkPanel
                 case "rightalt": return 0xA5;
                 default: return 0;
             }
+        }
+
+        /// <summary>
+        /// The reverse of <see cref="Parse"/>, or null if there is no name for the code. Every
+        /// name returned here MUST round-trip - <c>Parse(NameOf(vk)) == vk</c> - or the settings
+        /// panel would save a key the plugin then refuses to read back, and the only symptom
+        /// would be a hotkey that silently does nothing.
+        /// </summary>
+        public static string NameOf(int vk)
+        {
+            if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
+            if (vk >= 'A' && vk <= 'Z') return ((char)vk).ToString();
+            if (vk >= '0' && vk <= '9') return ((char)vk).ToString();
+            if (vk >= 0x60 && vk <= 0x69) return "Numpad" + (vk - 0x60);
+            switch (vk)
+            {
+                case 0x20: return "Space";
+                case 0x09: return "Tab";
+                case 0x2D: return "Insert";
+                case 0x14: return "CapsLock";
+                case 0xA0: return "LeftShift";
+                case 0xA1: return "RightShift";
+                case 0xA2: return "LeftControl";
+                case 0xA3: return "RightControl";
+                case 0xA4: return "LeftAlt";
+                case 0xA5: return "RightAlt";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Every key the settings panel will capture as a binding: exactly the set NameOf can
+        /// name. The panel's own control keys are deliberately ABSENT - Escape (cancels a
+        /// capture), Backspace (unbinds), Enter, Delete, the arrows, Home/End, PageUp/PageDown.
+        /// A hotkey captured onto one of those fights the panel; MenuKey = Enter would make every
+        /// row impossible to edit again, since the menu key is tested before the panel sees the
+        /// frame. Parse still reads them all, so the config file stays fully expressive.
+        /// </summary>
+        public static readonly int[] Bindable = BuildBindable();
+
+        private static int[] BuildBindable()
+        {
+            var list = new System.Collections.Generic.List<int>(80);
+            for (int f = 0x70; f <= 0x87; f++) list.Add(f);       // F1 - F24
+            for (int c = 'A'; c <= 'Z'; c++) list.Add(c);
+            for (int d = '0'; d <= '9'; d++) list.Add(d);
+            for (int n = 0x60; n <= 0x69; n++) list.Add(n);       // Numpad0 - Numpad9
+            list.AddRange(new[] { 0x20, 0x09, 0x2D, 0x14, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 });
+            return list.ToArray();
         }
     }
 }
