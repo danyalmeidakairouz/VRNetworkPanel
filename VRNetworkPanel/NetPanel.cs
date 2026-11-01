@@ -12,7 +12,7 @@ using UnityEngine;
 namespace VRNetworkPanel
 {
     /// <summary>
-    /// A Dota 2 style network readout: one thin line of FPS, ping, jitter and packet loss in / out,
+    /// A compact network readout: one thin line of FPS, ping, jitter and packet loss in / out,
     /// optionally a second line of traffic. READ-ONLY - it writes nothing to the game.
     ///
     /// WHERE THE NUMBERS COME FROM (measured from the interop assemblies, game build of

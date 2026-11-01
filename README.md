@@ -1,6 +1,6 @@
 # VRNetworkPanel
 
-A BepInEx 6 (IL2CPP) client mod for V Rising that draws a thin Dota 2 style readout of your
+A BepInEx 6 (IL2CPP) client mod for V Rising that draws a thin readout of your
 connection:
 
 ```
