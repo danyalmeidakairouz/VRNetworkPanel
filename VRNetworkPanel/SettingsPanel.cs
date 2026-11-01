@@ -47,7 +47,8 @@ namespace VRNetworkPanel
         {
             internal ConfigEntryBase Entry;
             internal string Section;
-            internal string Key;
+            internal string Key;    // the config key - used for logic, never shown
+            internal string Label;  // what the row shows: Humanize(Key), built once
             internal string Tip;
             internal Kind Kind;
             internal bool IsInt;
@@ -96,6 +97,7 @@ namespace VRNetworkPanel
                     Entry = entry,
                     Section = entry.Definition.Section,
                     Key = entry.Definition.Key,
+                    Label = Humanize(entry.Definition.Key),
                     Tip = entry.Description?.Description ?? string.Empty,
                 };
                 Type t = entry.SettingType;
@@ -155,6 +157,34 @@ namespace VRNetworkPanel
             float p = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(raw)));
             float m = raw / p;
             return (m < 1.5f ? 1f : m < 3.5f ? 2f : m < 7.5f ? 5f : 10f) * p;
+        }
+
+        /// <summary>
+        /// A config key as a readable label: "MenuKey" -> "Menu Key", "ShowTraffic" -> "Show
+        /// Traffic". A space goes before a capital that follows a lower-case letter or digit, and
+        /// before the last capital of a run that starts a new word ("FPSLimit" -> "FPS Limit").
+        /// A trailing unit "Ms" reads as "(ms)": "SampleMs" -> "Sample (ms)". Display only - the
+        /// key itself is what the config file and the code use.
+        /// </summary>
+        internal static string Humanize(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return key ?? string.Empty;
+            var sb = new System.Text.StringBuilder(key.Length + 4);
+            for (int i = 0; i < key.Length; i++)
+            {
+                char c = key[i];
+                if (i > 0 && char.IsUpper(c))
+                {
+                    char prev = key[i - 1];
+                    bool afterLower = char.IsLower(prev) || char.IsDigit(prev);
+                    bool endsAcronym = char.IsUpper(prev) && i + 1 < key.Length && char.IsLower(key[i + 1]);
+                    if (afterLower || endsAcronym) sb.Append(' ');
+                }
+                sb.Append(c);
+            }
+            string s = sb.ToString();
+            if (s.EndsWith(" Ms", StringComparison.Ordinal)) s = s.Substring(0, s.Length - 3) + " (ms)";
+            return s;
         }
 
         private static int SectionNumber(string section)
@@ -415,7 +445,7 @@ namespace VRNetworkPanel
                 if (sel) GUI.DrawTexture(new Rect(rr.x, rr.y, 3f * s, rr.height), _texAccent);
 
                 GUI.color = sel ? Color.white : new Color(0.84f, 0.84f, 0.88f);
-                GUI.Label(new Rect(rr.x + 10f * s, rr.y, labelW - 12f * s, rr.height), r.Key, _label);
+                GUI.Label(new Rect(rr.x + 10f * s, rr.y, labelW - 12f * s, rr.height), r.Label, _label);
 
                 var vr = new Rect(valueX, rr.y + 2f * s, valueW, rr.height - 4f * s);
                 bool capturing = sel && CapturingKey;
