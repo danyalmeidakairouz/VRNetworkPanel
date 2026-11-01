@@ -14,7 +14,8 @@ the game.
 ## Install
 
 1. Install BepInEx 6 for V Rising (IL2CPP build).
-2. Drop `VRNetworkPanel.dll` into `BepInEx/plugins/` (or `BepInEx/BloodpebblePlugins/` if you use
+2. Download `VRNetworkPanel.dll` from the
+   [Releases page](https://github.com/danyalmeidakairouz/VRNetworkPanel/releases) and drop it into `BepInEx/plugins/` (or `BepInEx/BloodpebblePlugins/` if you use
    Bloodpebble - it supports hot reload; not both).
 3. Launch the game. The readout shows in the top-left corner as soon as the mod loads. Press
    **F1** for the settings panel.
@@ -27,7 +28,7 @@ Keyboard only - the game does not pass mouse input to mod UI.
 |---|---|
 | Up / Down | Select a setting |
 | Left / Right | Switch OFF / ON, step a number, cycle the corner |
-| Enter | Flip a switch; on a key setting, wait for the key to bind (Backspace unbinds, except for `MenuKey`; Esc cancels) |
+| Enter | Flip a switch, or step a number / the corner forward like Right; on a key setting, wait for the key to bind (Backspace unbinds, except on Menu Key; Esc cancels) |
 | Delete | Restore the default |
 | Esc | Close |
 
@@ -69,6 +70,10 @@ launch; hand edits apply on the next launch).
 | `ShowTraffic` | `false` | Second line with KB/s and packets/s in and out (Steam only) |
 | `Background` | `true` | Translucent strip behind the text |
 
+Upgrading from 1.0.0: an existing config keeps the corner it already saved (the old default was
+`TopCenter`), so the readout does not move by itself - pick `TopLeft` in the F1 panel if you want
+the new default.
+
 Keys are single keys only (`F1`-`F24`, `A`-`Z`, `0`-`9`, `Space`, `Insert`, `Numpad0`-`9`, ...).
 Hotkeys are ignored while the game window is not focused.
 
@@ -89,6 +94,9 @@ without deploying (needed while the game is running, since Windows locks the loa
 Runs in game on a Steam-transport server: ping, loss and traffic read live. The fallback for
 non-Steam transports (ping from the game's own latency figure, shown with a `?`) has not been
 seen on a real server yet. The log says which source the readout is using each time it changes.
+
+Overhead, measured in game at ~160 fps: about 0.04 ms per frame (~0.7 % of a frame), with the
+readout and traffic line on and the panel closed.
 
 ## License
 
