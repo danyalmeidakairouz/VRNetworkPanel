@@ -1,0 +1,80 @@
+# VRNetworkPanel
+
+A BepInEx 6 (IL2CPP) client mod for V Rising that draws a thin Dota 2 style readout of your
+connection:
+
+```
+FPS  144   PING  38 ms   JITTER  1 ms   LOSS IN  0.0%   OUT  0.0%
+IN 12.4 KB/s 60 pkt/s    OUT 3.1 KB/s 60 pkt/s          (optional second line)
+```
+
+It is **read-only**: it reads the Steam connection's own real-time status and writes nothing to
+the game.
+
+## Install
+
+1. Install BepInEx 6 for V Rising (IL2CPP build).
+2. Drop `VRNetworkPanel.dll` into `BepInEx/plugins/` (or `BepInEx/BloodpebblePlugins/` if you use
+   Bloodpebble - it supports hot reload; not both).
+3. Launch the game. The readout shows at the top centre as soon as the mod loads.
+
+## What the numbers mean
+
+| Value | Source | Yellow / red at |
+|---|---|---|
+| `FPS` | frames counted over half a second | below 50 / 30 |
+| `PING` | Steam's round-trip estimate, ms | 80 / 150 ms |
+| `JITTER` | mean size of each ping change over the last 5 s | 10 / 30 ms |
+| `LOSS IN` | share of the server's packets that did not reach you | 1 % / 5 % |
+| `OUT` | share of your packets that did not reach the server | 1 % / 5 % |
+
+- **Loss needs the Steam transport.** Steam reports delivery quality per connection; the other
+  transports in the game (Lidgren, EOS) do not. On those, loss shows `-` and ping falls back to the
+  game's own latency figure, drawn grey with a `?` (e.g. `38 ms?`) because its unit is not yet
+  confirmed.
+- **Jitter is a floor.** Steam's ping is already a smoothed average, so jitter here is the
+  steadiness of that average, not of individual packets: it reads lower than true packet jitter
+  and cannot see packets arriving in bursts. A single route change lifts it for up to 5 s.
+  `-` for the first 2 s after connecting, `0` if ping has not moved.
+- Out-of-order packets count as not delivered, by Steam's definition.
+
+## Settings
+
+`BepInEx/config/vrnetworkpanel.cfg`, created on first launch.
+
+| Setting | Default | |
+|---|---|---|
+| `Enabled` | `true` | Show the readout |
+| `ToggleKey` | *(empty)* | Key that shows / hides it and saves the choice. Unbound by default so it cannot clash with another mod |
+| `DumpKey` | *(empty)* | Key that writes a `-- netpanel` section to `BepInEx/LogOutput.log`: transport, connection state, raw Steam figures |
+| `Corner` | `TopCenter` | `TopLeft`, `TopCenter`, `TopRight`, `BottomLeft`, `BottomCenter` or `BottomRight` |
+| `FontSize` | `13` | 8-40, shrunk further if the strip would not fit the screen |
+| `SampleMs` | `500` | How often the shown numbers change (floor 100). The connection is read ~10x a second regardless |
+| `ShowTraffic` | `false` | Second line with KB/s and packets/s in and out (Steam only) |
+| `Background` | `true` | Translucent strip behind the text |
+
+Keys are single keys only (`F1`-`F24`, `A`-`Z`, `0`-`9`, `Space`, `Insert`, `Numpad0`-`9`, ...).
+Hotkeys are ignored while the game window is not focused.
+
+## Build
+
+There is no solution file - build the project directly. Pass your install path:
+
+```powershell
+cd VRNetworkPanel
+dotnet build -c Release -p:VRisingDir="D:\Steam\steamapps\common\VRising"
+```
+
+A successful build copies the DLL into `BepInEx/plugins/`. Add `-p:CopyToPlugins=false` to build
+without deploying (needed while the game is running, since Windows locks the loaded DLL).
+
+## Status
+
+The data path was taken from the game's interop assemblies and moved here from VRVisionBoost,
+where it had shown a live Steam ping on a real server. This standalone build has **not yet been
+run in game** - if a number looks wrong, bind `DumpKey`, press it while connected and check the
+`-- netpanel` lines in the log.
+
+## License
+
+GPL-3.0, see `LICENSE`.
