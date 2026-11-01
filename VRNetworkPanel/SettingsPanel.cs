@@ -25,7 +25,7 @@ namespace VRNetworkPanel
     /// 3. <b>Rows are discovered by reflection over <see cref="Settings"/>, never listed.</b>
     ///    A hand-listed menu drifts from the config file. Bools flip, key names are captured as
     ///    a single keypress, AcceptableValueList entries cycle, AcceptableValueRange entries step.
-    ///    There is deliberately no typing editor: nine settings do not need one, and it was the
+    ///    There is deliberately no typing editor: a handful of settings do not need one, and it was the
     ///    largest and most layout-dependent part of the original.
     ///
     /// It writes only ConfigEntry.BoxedValue (BepInEx saves on set), so there is nothing to revert.
@@ -199,7 +199,7 @@ namespace VRNetworkPanel
         // ================================================================= input
 
         /// <summary>Once per frame. Returns true while open, so Plugin can keep the panel's keys
-        /// from also firing the toggle / dump hotkeys.</summary>
+        /// from also firing the toggle hotkey.</summary>
         public bool Update(Hotkeys keys)
         {
             if (!Visible) return false;
@@ -406,6 +406,11 @@ namespace VRNetworkPanel
                 if (rr.yMax > footY) continue; // a very short screen: clip rather than overlap
 
                 bool sel = i == _selected;
+                // GUI.color tints DrawTexture too, and the previous row left it set to its value's
+                // text colour - near-black after a switch that is ON. Without this reset the row
+                // below an ON switch drew its background, and its selection highlight, tinted
+                // almost black: MenuKey (below Enabled) and Background (below ShowTraffic).
+                GUI.color = Color.white;
                 GUI.DrawTexture(rr, sel ? _texSel : (i % 2 == 0 ? _texRow : _texPanel));
                 if (sel) GUI.DrawTexture(new Rect(rr.x, rr.y, 3f * s, rr.height), _texAccent);
 

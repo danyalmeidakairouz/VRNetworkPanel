@@ -63,7 +63,6 @@ launch; hand edits apply on the next launch).
 | `Enabled` | `true` | Show the readout |
 | `MenuKey` | `F1` | Opens / closes the settings panel. Empty disables it |
 | `ToggleKey` | *(empty)* | Key that shows / hides the readout and saves the choice. Unbound by default so it cannot clash with another mod |
-| `DumpKey` | *(empty)* | Key that writes a `-- netpanel` section to `BepInEx/LogOutput.log`: transport, connection state, raw Steam figures |
 | `Corner` | `TopLeft` | `TopLeft`, `TopCenter`, `TopRight`, `BottomLeft`, `BottomCenter` or `BottomRight` |
 | `FontSize` | `13` | 8-40, shrunk further if the strip would not fit the screen |
 | `SampleMs` | `500` | How often the shown numbers change, 100-5000. The connection is read ~10x a second regardless |
@@ -87,10 +86,9 @@ without deploying (needed while the game is running, since Windows locks the loa
 
 ## Status
 
-The data path was taken from the game's interop assemblies and moved here from VRVisionBoost,
-where it had shown a live Steam ping on a real server. This standalone build has **not yet been
-run in game** - if a number looks wrong, bind `DumpKey`, press it while connected and check the
-`-- netpanel` lines in the log.
+Runs in game on a Steam-transport server: ping, loss and traffic read live. The fallback for
+non-Steam transports (ping from the game's own latency figure, shown with a `?`) has not been
+seen on a real server yet. The log says which source the readout is using each time it changes.
 
 ## License
 

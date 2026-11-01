@@ -140,8 +140,8 @@ namespace VRNetworkPanel
         private readonly Hotkeys _keys = new Hotkeys();
         private readonly NetPanel _panel;
         private readonly SettingsPanel _menu;
-        private int _menuKey, _toggleKey, _dumpKey;
-        private string _menuCfg, _toggleCfg, _dumpCfg;
+        private int _menuKey, _toggleKey;
+        private string _menuCfg, _toggleCfg;
 
         // Update runs every frame, OnGUI several times a frame: a feature that throws there would
         // flood the log. Update errors are throttled with a held-back count; draw errors are
@@ -194,24 +194,15 @@ namespace VRNetworkPanel
         {
             _menuCfg = Plugin.Cfg.MenuKey.Value;
             _toggleCfg = Plugin.Cfg.ToggleKey.Value;
-            _dumpCfg = Plugin.Cfg.DumpKey.Value;
             _menuKey = BindOptional(_menuCfg, "MenuKey", out string menu);
             _toggleKey = BindOptional(_toggleCfg, "ToggleKey", out string toggle);
-            _dumpKey = BindOptional(_dumpCfg, "DumpKey", out string dump);
 
-            // WasPressed consumes the edge, so of two actions on one key only the EARLIER in
-            // Update() fires. This order must match Update(): menu, toggle, dump.
-            WarnIfShared(_menuKey, menu, "MenuKey", _toggleKey, "ToggleKey");
-            WarnIfShared(_menuKey, menu, "MenuKey", _dumpKey, "DumpKey");
-            WarnIfShared(_toggleKey, toggle, "ToggleKey", _dumpKey, "DumpKey");
-            Plugin.Logger.LogInfo($"Hotkeys - menu: {menu}  toggle: {toggle}  dump: {dump}");
-        }
-
-        private static void WarnIfShared(int a, string name, string aLabel, int b, string bLabel)
-        {
-            if (a == 0 || a != b) return;
-            Plugin.Logger.LogWarning($"{aLabel} and {bLabel} are both bound to {name} - only "
-                                   + $"{aLabel} will fire. Give them different keys.");
+            // WasPressed consumes the edge, and the menu key is tested first in Update(), so on
+            // a shared key only the menu fires.
+            if (_menuKey != 0 && _menuKey == _toggleKey)
+                Plugin.Logger.LogWarning($"MenuKey and ToggleKey are both bound to {menu} - only "
+                                       + "MenuKey will fire. Give them different keys.");
+            Plugin.Logger.LogInfo($"Hotkeys - menu: {menu}  toggle: {toggle}");
         }
 
         private static int BindOptional(string configured, string label, out string effective)
@@ -233,8 +224,7 @@ namespace VRNetworkPanel
                 // Also how a key rebound in the settings panel takes effect: the panel writes the
                 // entry, and the compare here sees the new string on the next frame.
                 if (!string.Equals(_menuCfg, Plugin.Cfg.MenuKey.Value, StringComparison.Ordinal)
-                    || !string.Equals(_toggleCfg, Plugin.Cfg.ToggleKey.Value, StringComparison.Ordinal)
-                    || !string.Equals(_dumpCfg, Plugin.Cfg.DumpKey.Value, StringComparison.Ordinal))
+                    || !string.Equals(_toggleCfg, Plugin.Cfg.ToggleKey.Value, StringComparison.Ordinal))
                     ParseHotkeys();
 
                 _keys.Update();
@@ -244,19 +234,15 @@ namespace VRNetworkPanel
                 if (_menu != null && !_menu.CapturingKey && _keys.WasPressed(_menuKey))
                     _menu.Toggle();
 
-                // An open panel owns the keyboard, so the hotkeys below are skipped while it is.
+                // An open panel owns the keyboard, so the toggle is skipped while it is.
                 bool menuOpen = _menu != null && _menu.Update(_keys);
-                if (!menuOpen)
+                if (!menuOpen && _keys.WasPressed(_toggleKey))
                 {
-                    if (_keys.WasPressed(_toggleKey))
-                    {
-                        // Writing .Value persists it. NetPanel notices on its next frame and
-                        // clears its reading; it writes nothing to the game, so nothing to revert.
-                        bool on = !Plugin.Cfg.Enabled.Value;
-                        Plugin.Cfg.Enabled.Value = on;
-                        Plugin.Logger.LogInfo($"Network panel {(on ? "ON" : "OFF")}");
-                    }
-                    if (_keys.WasPressed(_dumpKey)) _panel.Dump();
+                    // Writing .Value persists it. NetPanel notices on its next frame and clears
+                    // its reading; it writes nothing to the game, so there is nothing to revert.
+                    bool on = !Plugin.Cfg.Enabled.Value;
+                    Plugin.Cfg.Enabled.Value = on;
+                    Plugin.Logger.LogInfo($"Network panel {(on ? "ON" : "OFF")}");
                 }
 
                 _panel.Update();
