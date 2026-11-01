@@ -1,9 +1,6 @@
 using System;
 using System.Globalization;
-using System.Runtime.InteropServices;
 using BepInEx.Logging;
-using Il2CppInterop.Runtime;
-using Il2CppInterop.Runtime.InteropTypes;
 using ProjectM;
 using Steamworks;
 using Stunlock.Network;
@@ -35,8 +32,7 @@ namespace VRNetworkPanel
     ///
     /// The other two transports in the build (Lidgren, EOS) expose no delivery-quality figure,
     /// so on them loss reads as a dash and ping falls back to ClientBootstrapSystem.Latency,
-    /// whose UNIT IS UNMEASURED - the dump key's "-- netpanel" section prints the raw value so it
-    /// can be settled. Do not promise loss on a non-Steam transport.
+    /// whose UNIT IS UNMEASURED. Do not promise loss on a non-Steam transport.
     ///
     /// Nothing from the world is cached across samples. Leave Game destroys ClientBootstrapSystem
     /// and the transport with it, and calling into a freed one is the silent native crash
@@ -107,7 +103,6 @@ namespace VRNetworkPanel
         private int _deltaHead, _deltaCount;
         private int _lastPing = -1;
         private float _jitterSince = -1f;
-        private int _pingChanges;                     // for the dump: changes seen in this run
 
         // Set once when the Steam status call throws (a stripped body, a patch that moved it).
         // From then on the probe falls back to Latency only, said once in the log - not retried
@@ -182,7 +177,6 @@ namespace VRNetworkPanel
             _deltaHead = _deltaCount = 0;
             _lastPing = -1;
             _jitterSince = -1f;
-            _pingChanges = 0;
         }
 
         private void ObservePing(int ping, float now)
@@ -194,7 +188,6 @@ namespace VRNetworkPanel
                 _deltaMs[_deltaHead] = Math.Abs(ping - _lastPing);
                 _deltaHead = (_deltaHead + 1) % DeltaCap;
                 if (_deltaCount < DeltaCap) _deltaCount++;
-                _pingChanges++;
             }
             _lastPing = ping;
         }
@@ -368,8 +361,7 @@ namespace VRNetworkPanel
         /// is seconds, so a value under 3 is read as seconds; 3 or more as milliseconds already.
         /// This IS wrong in one regime whichever unit is real (ms: loopback 0.4 reads as 400 ms;
         /// seconds: a 5 s stall reads as 5 ms), so a number from here is always drawn with a "?"
-        /// and in the unknown colour - never green or red. The dump prints the raw value so the
-        /// unit can be settled and this heuristic deleted.
+        /// and in the unknown colour - never green or red.
         /// </summary>
         private static int LatencyToMs(float v)
         {
@@ -401,7 +393,7 @@ namespace VRNetworkPanel
                 case Source.LatencyOnly:
                     _log.LogInfo("Connected over a transport with no delivery-quality figure (not "
                                + "Steam, or Steam status unreadable) - showing ping only, loss reads "
-                               + "'-'. The dump key's '-- netpanel' section names it.");
+                               + "'-'.");
                     break;
                 case Source.NotConnected:
                     _log.LogInfo("No server connection - showing FPS only.");
@@ -651,96 +643,6 @@ namespace VRNetworkPanel
             Reset();
             if (_bg != null) UnityEngine.Object.Destroy(_bg);
             _bg = null;
-        }
-
-        // ---------------------------------------------------------------- dump
-
-        /// <summary>
-        /// The "-- netpanel" log section. Not gated on Enabled: it is how you find out which
-        /// transport your server uses and what the raw figures are before trusting the readout -
-        /// in particular the raw Latency, whose unit is not yet measured.
-        /// </summary>
-        public void Dump()
-        {
-            _log.LogInfo("-- netpanel");
-            float now = Time.unscaledTime;
-            float jit = Jitter(now);
-            _log.LogInfo($"  readout: enabled={_cfg.Enabled.Value} source={_source} "
-                       + $"jitter={(jit < 0f ? "settling" : jit.ToString("0.#", CultureInfo.InvariantCulture) + "ms")} "
-                       + $"from {_deltaCount} ping changes in the last {JitterWindowSeconds:0}s "
-                       + $"({_pingChanges} this run, watched "
-                       + $"{(_jitterSince < 0f ? 0f : now - _jitterSince):0.0}s)");
-            World client = FindClient();
-            if (!WorldGuard.Usable(client)) { _log.LogInfo("  no client world"); return; }
-
-            ClientBootstrapSystem boot = null;
-            try { boot = client.GetExistingSystemManaged<ClientBootstrapSystem>(); }
-            catch (Exception e) { _log.LogInfo($"  ClientBootstrapSystem lookup failed: {e.Message}"); }
-            if (boot == null) { _log.LogInfo("  no ClientBootstrapSystem in Client_0"); return; }
-
-            string latency;
-            try { latency = boot.Latency.ToString("0.####", CultureInfo.InvariantCulture); }
-            catch (Exception e) { latency = "unreadable (" + e.Message + ")"; }
-
-            var cnl = boot._NetClient?.TryCast<ClientNetworkLayer>();
-            if (cnl == null) { _log.LogInfo($"  no network layer  Latency(raw)={latency}"); return; }
-
-            var transport = cnl._TransportLayer;
-            _log.LogInfo($"  connect state={cnl._ConnectState}  transport={ClassName(transport)}  "
-                       + $"Latency(raw)={latency} -> shown as {LatencyToMsText(boot)}");
-
-            var steam = transport?.TryCast<ClientSteamTransportLayer>();
-            if (steam == null) { _log.LogInfo("  not the Steam transport - no loss figures exist"); return; }
-            var net = steam._NetClient;
-            if (net == null) { _log.LogInfo("  Steam transport, but its client is not created yet"); return; }
-            // Same gate as the sampler: the status call is never made on a half set up or
-            // half torn down connection, even from a key press.
-            if (cnl._ConnectState != ClientConnectState.Connected)
-            {
-                _log.LogInfo("  Steam transport, not Connected - status call skipped");
-                return;
-            }
-            try
-            {
-                var q = net.GetQuickConnectionStatus();
-                var ci = CultureInfo.InvariantCulture;
-                _log.LogInfo($"  steam valid={q.IsValid} state={q.ConnectionState} ping={q.Ping}ms "
-                           + $"qualityLocal={q.ConnectionQualityLocal.ToString("0.####", ci)} "
-                           + $"qualityRemote={q.ConnectionQualityRemote.ToString("0.####", ci)} "
-                           + $"in={q.InBytesPerSec.ToString("0", ci)}B/s "
-                           + $"{q.InPacketsPerSec.ToString("0.#", ci)}pkt/s "
-                           + $"out={q.OutBytesPerSec.ToString("0", ci)}B/s "
-                           + $"{q.OutPacketsPerSec.ToString("0.#", ci)}pkt/s sendRate={q.SendRate} "
-                           + $"pendingRel={q.PendingBytesReliable} "
-                           + $"pendingUnrel={q.PendingBytesUnreliable}");
-            }
-            catch (Exception e) { _log.LogInfo($"  steam status call failed: {e.Message}"); }
-        }
-
-        private static string LatencyToMsText(ClientBootstrapSystem boot)
-        {
-            try
-            {
-                int ms = LatencyToMs(boot.Latency);
-                return ms < 0 ? "unknown" : ms.ToString(CultureInfo.InvariantCulture) + "ms";
-            }
-            catch { return "unknown"; }
-        }
-
-        /// <summary>The native class name of an il2cpp object, through the raw il2cpp API rather
-        /// than GetType(), which goes through a managed body that may not have survived stripping.</summary>
-        private static string ClassName(Il2CppObjectBase o)
-        {
-            if (o == null) return "(null)";
-            try
-            {
-                IntPtr klass = IL2CPP.il2cpp_object_get_class(o.Pointer);
-                if (klass == IntPtr.Zero) return "(unknown)";
-                string ns = Marshal.PtrToStringAnsi(IL2CPP.il2cpp_class_get_namespace(klass));
-                string name = Marshal.PtrToStringAnsi(IL2CPP.il2cpp_class_get_name(klass));
-                return string.IsNullOrEmpty(ns) ? name : ns + "." + name;
-            }
-            catch { return "(unknown)"; }
         }
     }
 }

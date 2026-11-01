@@ -14,7 +14,6 @@ namespace VRNetworkPanel
         public ConfigEntry<bool> Enabled;
         public ConfigEntry<string> MenuKey;
         public ConfigEntry<string> ToggleKey;
-        public ConfigEntry<string> DumpKey;
 
         public ConfigEntry<string> Corner;
         public ConfigEntry<int> FontSize;
@@ -30,8 +29,6 @@ namespace VRNetworkPanel
                 "Key that opens / closes the in-game settings panel. Single keys only (F1-F24, A-Z, 0-9, Space, Insert, Numpad0-9, ...); modifier combinations like Ctrl+F1 are not supported. Empty disables the panel.");
             ToggleKey = cfg.Bind("1. General", "ToggleKey", "",
                 "Key that shows / hides the readout. Flips Enabled and saves it. Empty by default so it cannot clash with another mod's key; set one if you want it.");
-            DumpKey = cfg.Bind("1. General", "DumpKey", "",
-                "Key that writes a '-- netpanel' diagnostic section to BepInEx/LogOutput.log: which transport your server uses, the connection state and the raw Steam figures. Works whether or not the readout is shown. Empty by default.");
 
             Corner = cfg.Bind("2. Display", "Corner", "TopLeft",
                 new ConfigDescription("Where the readout sits on screen.",
