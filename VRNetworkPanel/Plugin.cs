@@ -15,7 +15,7 @@ namespace VRNetworkPanel
         // The GUID determines the config filename. Changing it orphans the existing config.
         public const string GUID = "vrnetworkpanel";
         public const string NAME = "VRNetworkPanel";
-        public const string VERSION = "1.1.1";
+        public const string VERSION = "1.1.2";
 
         internal static ManualLogSource Logger;
         internal static Settings Cfg;
