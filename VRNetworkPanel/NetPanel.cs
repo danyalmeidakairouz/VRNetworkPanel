@@ -426,26 +426,24 @@ namespace VRNetworkPanel
         }
 
         // ---------------------------------------------------------------- drawing
+        //
+        // Each line is ONE GUI.Label of rich text - "FPS: 175   PING: 90 ms ..." with the labels
+        // grey and each value in its own colour via <color> tags. That is what lets the text flow
+        // as "LABEL: value" with no gap: the alternative, a label per piece placed side by side,
+        // needs each piece's width, and GUIStyle.CalcSize is not proven to survive stripping in
+        // this game. Rich text is parsed by the native text renderer, and GUIStyle.richText is a
+        // plain style setter like wordWrap and fontSize, which already work here.
+        //
+        // The background strip's width is ESTIMATED from per-character widths (EmWidth), sized
+        // for the WIDEST values each line can show, so the strip does not twitch as digits change.
 
-        private GUIStyle _left, _right;
+        private GUIStyle _style;
         private int _styleFontSize = -1;
         private Texture2D _bg;
         private bool _dirtyFps = true, _dirtyNet = true;
 
-        // Rebuilt only at publish (SampleMs) or when the FPS window closes, never per frame - a
-        // GUIContent per label per frame is pointless allocation churn.
-        private readonly GUIContent _cFpsL = new GUIContent { text = "FPS" };
-        private readonly GUIContent _cPingL = new GUIContent { text = "PING" };
-        private readonly GUIContent _cJitL = new GUIContent { text = "JITTER" };
-        private readonly GUIContent _cInL = new GUIContent { text = "LOSS IN" };
-        private readonly GUIContent _cOutL = new GUIContent { text = "OUT" };
-        private readonly GUIContent _cFps = new GUIContent();
-        private readonly GUIContent _cPing = new GUIContent();
-        private readonly GUIContent _cJit = new GUIContent();
-        private readonly GUIContent _cIn = new GUIContent();
-        private readonly GUIContent _cOut = new GUIContent();
-        private readonly GUIContent _cTraffic = new GUIContent();
-        private Color _colFps, _colPing, _colIn, _colOut, _colJit;
+        // Rebuilt only at publish (SampleMs) or when the FPS window closes, never per frame.
+        private string _fpsPart = "", _netPart = "", _line1 = "", _line2 = "";
 
         private static readonly Color LabelColor = new Color(0.62f, 0.64f, 0.68f);
         private static readonly Color GoodColor = new Color(0.88f, 0.92f, 0.88f);
@@ -454,18 +452,29 @@ namespace VRNetworkPanel
         private static readonly Color UnknownColor = new Color(0.5f, 0.5f, 0.55f);
 
         private const string Dash = "-";
+        private const string Sep = "    ";
 
-        // Slot widths in font-size units, sized for the widest value each can hold ("999",
-        // "9999 ms", "100.0%") plus its label, with room to spare at any size.
-        private const float UFps = 5.2f, UPing = 7.6f, UJit = 8.4f, UIn = 8.4f, UOut = 6.4f;
-        private const float UGap = 1.2f;
-        private const float WidthUnits = UFps + UPing + UJit + UIn + UOut + UGap * 4f;
+        // The widest each line can get, plain text. Used only to size the strip and to shrink
+        // the font on a narrow screen - never drawn.
+        private const string WidestLine1 =
+            "FPS: 999" + Sep + "PING: 9999 ms?" + Sep + "JITTER: 999 ms?" + Sep
+            + "LOSS IN: 100.0%" + Sep + "OUT: 100.0%";
+        private const string WidestLine2 =
+            "IN: 9999.9 KB/s 9999 pkt/s" + Sep + "OUT: 9999.9 KB/s 9999 pkt/s";
+        private static readonly float Line1Em = EmWidth(WidestLine1);
+        private static readonly float Line2Em = EmWidth(WidestLine2);
+
+        private static readonly string LabelHex = Hex(LabelColor);
 
         private void RebuildFps()
         {
             _dirtyFps = false;
-            _cFps.text = _fps < 0f ? Dash : Mathf.RoundToInt(_fps).ToString(CultureInfo.InvariantCulture);
-            _colFps = _fps < 0f ? UnknownColor : _fps >= 50f ? GoodColor : _fps >= 30f ? WarnColor : BadColor;
+            // Capped at the width WidestLine1 allows for (an uncapped menu can run past 1000).
+            string fps = _fps < 0f ? Dash
+                       : Mathf.Min(Mathf.RoundToInt(_fps), 999).ToString(CultureInfo.InvariantCulture);
+            Color c = _fps < 0f ? UnknownColor : _fps >= 50f ? GoodColor : _fps >= 30f ? WarnColor : BadColor;
+            _fpsPart = Part("FPS", fps, c);
+            _line1 = _fpsPart + Sep + _netPart;
         }
 
         private void RebuildNet()
@@ -473,25 +482,69 @@ namespace VRNetworkPanel
             _dirtyNet = false;
             var ci = CultureInfo.InvariantCulture;
 
-            _cPing.text = _pingMs < 0 ? Dash : _pingMs.ToString(ci) + (_pingGuessed ? " ms?" : " ms");
-            _colPing = _pingMs < 0 || _pingGuessed ? UnknownColor
-                     : _pingMs < 80 ? GoodColor : _pingMs < 150 ? WarnColor : BadColor;
-
-            _cIn.text = LossText(_lossIn);
-            _colIn = LossColor(_lossIn);
-            _cOut.text = LossText(_lossOut);
-            _colOut = LossColor(_lossOut);
+            string ping = _pingMs < 0 ? Dash : _pingMs.ToString(ci) + (_pingGuessed ? " ms?" : " ms");
+            Color cPing = _pingMs < 0 || _pingGuessed ? UnknownColor
+                        : _pingMs < 80 ? GoodColor : _pingMs < 150 ? WarnColor : BadColor;
 
             // Built from the same pings as PING, so a guessed unit taints it the same way.
-            _cJit.text = _jitterMs < 0f ? Dash
-                       : Mathf.RoundToInt(_jitterMs).ToString(ci) + (_pingGuessed ? " ms?" : " ms");
-            _colJit = _jitterMs < 0f || _pingGuessed ? UnknownColor
-                    : _jitterMs < 10f ? GoodColor : _jitterMs < 30f ? WarnColor : BadColor;
+            string jit = _jitterMs < 0f ? Dash
+                       : Mathf.Min(Mathf.RoundToInt(_jitterMs), 999).ToString(ci) + (_pingGuessed ? " ms?" : " ms");
+            Color cJit = _jitterMs < 0f || _pingGuessed ? UnknownColor
+                       : _jitterMs < 10f ? GoodColor : _jitterMs < 30f ? WarnColor : BadColor;
 
-            _cTraffic.text = _inKBs < 0f
-                ? "IN  -    OUT  -"
-                : $"IN {_inKBs.ToString("0.0", ci)} KB/s {_inPps.ToString("0", ci)} pkt/s    "
-                + $"OUT {_outKBs.ToString("0.0", ci)} KB/s {_outPps.ToString("0", ci)} pkt/s";
+            _netPart = Part("PING", ping, cPing) + Sep
+                     + Part("JITTER", jit, cJit) + Sep
+                     + Part("LOSS IN", LossText(_lossIn), LossColor(_lossIn)) + Sep
+                     + Part("OUT", LossText(_lossOut), LossColor(_lossOut));
+            _line1 = _fpsPart + Sep + _netPart;
+
+            // All label colour, so no tags beyond the one wrapping it.
+            string traffic = _inKBs < 0f
+                ? "IN: -" + Sep + "OUT: -"
+                : $"IN: {_inKBs.ToString("0.0", ci)} KB/s {_inPps.ToString("0", ci)} pkt/s" + Sep
+                + $"OUT: {_outKBs.ToString("0.0", ci)} KB/s {_outPps.ToString("0", ci)} pkt/s";
+            _line2 = _plain ? traffic : "<color=#" + LabelHex + ">" + traffic + "</color>";
+        }
+
+        /// <summary>"LABEL: value" with the label grey and the value in its own colour. Every
+        /// string here is ours (digits, "ms", "%", "-"), so nothing needs escaping.</summary>
+        private string Part(string label, string value, Color valueColor)
+            => _plain ? label + ": " + value
+             : "<color=#" + LabelHex + ">" + label + ":</color> <color=#" + Hex(valueColor) + ">"
+             + value + "</color>";
+
+        private bool _plain; // GUIStyle.richText threw: draw without tags (see EnsureStyle)
+
+        /// <summary>RRGGBB. Written out rather than ColorUtility.ToHtmlStringRGB, which no code in
+        /// this game is known to call - see the stripping note above.</summary>
+        private static string Hex(Color c)
+        {
+            int r = Mathf.Clamp(Mathf.RoundToInt(c.r * 255f), 0, 255);
+            int g = Mathf.Clamp(Mathf.RoundToInt(c.g * 255f), 0, 255);
+            int b = Mathf.Clamp(Mathf.RoundToInt(c.b * 255f), 0, 255);
+            return r.ToString("X2", CultureInfo.InvariantCulture) + g.ToString("X2", CultureInfo.InvariantCulture)
+                 + b.ToString("X2", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Approximate width of plain text in font-size units, from Arial Bold advance widths
+        /// (Unity's built-in IMGUI font), rounded up. An estimate on purpose - see the section
+        /// note - and erring wide, so the strip never ends inside the text.
+        /// </summary>
+        private static float EmWidth(string s)
+        {
+            float w = 0f;
+            foreach (char ch in s)
+            {
+                if (ch == ' ' || ch == '.' || ch == ':' || ch == '/') w += 0.28f;
+                else if (ch >= '0' && ch <= '9') w += 0.56f;
+                else if (ch == '%') w += 0.89f;
+                else if (ch == '-') w += 0.34f;
+                else if (ch == '?') w += 0.61f;
+                else if (ch >= 'A' && ch <= 'Z') w += 0.73f;
+                else w += 0.61f; // lower case and anything else
+            }
+            return w * 1.05f;
         }
 
         private static string LossText(float l)
@@ -503,9 +556,8 @@ namespace VRNetworkPanel
         /// <summary>
         /// Draw the readout, Repaint pass only. Uses only GUI.Label, GUI.DrawTexture, GUI.color,
         /// GUIStyle, Texture2D and Event.current.type - the IMGUI calls proven to survive
-        /// stripping in this game. In particular no GUIStyle.CalcSize: each segment is a
-        /// fixed-width slot with its label left-aligned and its value right-aligned, so nothing
-        /// has to be measured.
+        /// stripping in this game - plus GUIStyle.richText, a style setter of the same kind.
+        /// No GUIStyle.CalcSize.
         /// </summary>
         public void Draw()
         {
@@ -513,62 +565,40 @@ namespace VRNetworkPanel
             var ev = Event.current;
             if (ev != null && ev.type != EventType.Repaint) return;
 
+            bool traffic = _cfg.ShowTraffic.Value;
+            float em = traffic ? Mathf.Max(Line1Em, Line2Em) : Line1Em;
+
             // Clamp the size so the strip never runs off a narrow screen.
+            const float pad = 6f, margin = 8f;
             int size = Mathf.Clamp(_cfg.FontSize.Value, 8, 40);
-            int fit = Mathf.FloorToInt((Screen.width - 28f) / WidthUnits);
+            int fit = Mathf.FloorToInt((Screen.width - 2f * (pad + margin)) / em);
             EnsureStyle(Mathf.Max(8, Mathf.Min(size, fit)));
             if (_dirtyFps) RebuildFps();
             if (_dirtyNet) RebuildNet();
 
             float fs = _styleFontSize;
             float lineH = fs + 6f;
-            float pad = 6f, gap = fs * UGap;
-            float rowW = fs * WidthUnits;
-            bool traffic = _cfg.ShowTraffic.Value;
-            float width = rowW + pad * 2f;
+            float textW = Mathf.Ceil(fs * em);
+            float width = textW + pad * 2f;
             float height = lineH * (traffic ? 2 : 1) + pad * 2f - 2f;
 
-            Corner(width, height, out float x, out float y);
+            Corner(width, height, margin, out float x, out float y);
 
             var prev = GUI.color;
+            GUI.color = Color.white; // the colours are in the text; a tint would multiply them
             if (_cfg.Background.Value && _bg != null)
-            {
-                GUI.color = Color.white;
                 GUI.DrawTexture(new Rect(x, y, width, height), _bg);
-            }
 
-            float cx = x + pad, cy = y + pad - 1f;
-            Segment(ref cx, cy, fs * UFps, lineH, _cFpsL, _cFps, _colFps); cx += gap;
-            Segment(ref cx, cy, fs * UPing, lineH, _cPingL, _cPing, _colPing); cx += gap;
-            Segment(ref cx, cy, fs * UJit, lineH, _cJitL, _cJit, _colJit); cx += gap;
-            Segment(ref cx, cy, fs * UIn, lineH, _cInL, _cIn, _colIn); cx += gap;
-            Segment(ref cx, cy, fs * UOut, lineH, _cOutL, _cOut, _colOut);
-
-            if (traffic)
-            {
-                GUI.color = LabelColor;
-                GUI.Label(new Rect(x + pad, cy + lineH, rowW, lineH), _cTraffic, _left);
-            }
+            float cy = y + pad - 1f;
+            GUI.Label(new Rect(x + pad, cy, textW, lineH), _line1, _style);
+            if (traffic) GUI.Label(new Rect(x + pad, cy + lineH, textW, lineH), _line2, _style);
             GUI.color = prev;
         }
 
-        private void Segment(ref float x, float y, float w, float h,
-                             GUIContent label, GUIContent value, Color valueColor)
-        {
-            var r = new Rect(x, y, w, h);
-            GUI.color = LabelColor;
-            GUI.Label(r, label, _left);
-            GUI.color = valueColor;
-            GUI.Label(r, value, _right);
-            x += w;
-        }
-
         /// <summary>Place the box by Corner: "Bottom..." puts it at the bottom, "...Left" /
-        /// "...Right" at that side, anything else top / centre. It is free text, so a near-miss
-        /// such as "Right" lands top-right rather than at the TopCenter fallback.</summary>
-        private void Corner(float w, float h, out float x, out float y)
+        /// "...Right" at that side, anything else top / centre.</summary>
+        private void Corner(float w, float h, float m, out float x, out float y)
         {
-            const float m = 8f;
             string c = _cfg.Corner.Value ?? "";
             bool bottom = c.StartsWith("Bottom", StringComparison.OrdinalIgnoreCase);
             bool left = c.EndsWith("Left", StringComparison.OrdinalIgnoreCase);
@@ -579,16 +609,32 @@ namespace VRNetworkPanel
 
         private void EnsureStyle(int size)
         {
-            if (_left == null)
+            if (_style == null)
             {
-                _left = NewStyle(TextAnchor.MiddleLeft);
-                _right = NewStyle(TextAnchor.MiddleRight);
+                // Built in a local and kept only once complete: a setter that throws must not
+                // leave a half-built style that the null check then never rebuilds.
+                var st = new GUIStyle();
+                st.alignment = TextAnchor.MiddleLeft;
+                st.wordWrap = false;
+                st.clipping = TextClipping.Overflow; // an estimate a little short must not cut text
+                st.fontStyle = FontStyle.Bold;
+                // White once; the <color> tags carry the real colours. GUIStyle.normal
+                // allocates per read, so it is touched only here.
+                st.normal.textColor = Color.white;
+                try { st.richText = true; }
+                catch (Exception e)
+                {
+                    // Fail open: one colour without tags beats literal "<color=...>" text.
+                    _plain = true;
+                    _dirtyFps = _dirtyNet = true;
+                    _log.LogWarning($"Rich text is unavailable, so the readout is drawn in one colour: {e.Message}");
+                }
+                _style = st;
             }
             if (size != _styleFontSize)
             {
                 _styleFontSize = size;
-                _left.fontSize = size;
-                _right.fontSize = size;
+                _style.fontSize = size;
             }
             if (_bg == null)
             {
@@ -597,18 +643,6 @@ namespace VRNetworkPanel
                 _bg.Apply();
                 _bg.hideFlags = HideFlags.HideAndDontSave;
             }
-        }
-
-        private static GUIStyle NewStyle(TextAnchor anchor)
-        {
-            var s = new GUIStyle();
-            s.alignment = anchor;
-            s.wordWrap = false;
-            s.clipping = TextClipping.Overflow;
-            s.fontStyle = FontStyle.Bold;
-            // White once; GUI.color tints it. GUIStyle.normal allocates per read.
-            s.normal.textColor = Color.white;
-            return s;
         }
 
         /// <summary>The background texture is HideAndDontSave, so a hot reload would leak it.</summary>
